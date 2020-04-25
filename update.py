@@ -125,17 +125,20 @@ def main():
             pg = fr.getPage(pgn) 
             text = text + pg.extractText()
 
-        lines = text.split('\n')
+        '''
+        Strip all newlines
+        (random from one PDF to another)
+        '''
+        text = text.replace('\n', '')
 
-        start = lines.index('Data Table for Figures 1 and 2')
-        end = lines.index('Data Table for Figure 3')
+        start = text.index('Data Table for Figures 1 and 2')
+        end = text.index('Data Table for Figure 3')
 
         '''
-        Need to get around some ugliness where the 
-        PDF reader ends up with dates split across lines
+        List of non-whitespace tokens
         '''
-        snippet = ''.join(lines[start:end]).split()
-
+        snippet = text[start:end].split()
+        
         table = OPHTable()
         table.process(snippet)
         table.to_csv(CSV_OUTPUT)
