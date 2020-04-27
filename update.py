@@ -12,7 +12,6 @@ See oph.ipynb for reverse engineering/prototyping
 Returns:
  - 0 if new PDF found (CSV updated)
  - 1 otherwise
-
 """
 
 import requests as rq
@@ -20,12 +19,14 @@ from html.parser import HTMLParser
 from PyPDF4 import PdfFileReader as PDFR
 import os
 import sys
+import csv
 
 """
 CONSTANTS
 """
 OPH_url = 'https://www.ottawapublichealth.ca/en/reports-research-and-statistics/la-maladie-coronavirus-covid-19.aspx'
 CSV_OUTPUT = 'timeseries/ottawa_cases.csv'
+
 """
 CLASSES
 """
@@ -53,18 +54,13 @@ class PdfUrlParser(HTMLParser):
                 break
                 
 
-class OPHTable(object):
-    """
-    Simple object to construct CSV rows 
-    from text parsed from OPH PDF
-    """
+class DateNumTable(object):
+    '''
+    Need docstring here
+    '''
     def __init__(self):
-        self.row = ['Date,Total,Daily']
-        
-    def add_row(self, date, total, daily):
-        row = '%s,%s,%s' % (date, total, daily)
-        self.row.append(row)
-        
+        self.dict = {}
+
     def is_date(self, line):
         # Date format is like 2/19/2020
         rc = False
@@ -73,19 +69,16 @@ class OPHTable(object):
            and all( [n.isnumeric() for n in mdy] ):
            rc = True
         return rc
-        
-    def process(self, slice):
-        for i in range(len(slice)):
-            if i + 2 < len(slice) \
-               and self.is_date(slice[i]) \
-               and slice[i+1].isnumeric() \
-               and slice[i+2].isnumeric():
-                self.add_row(slice[i], slice[i+1], slice[i+2])
 
-    def to_csv(self, filename):
-        with open(filename, 'w')as csv:
-            for row in self.row:
-                csv.write(row + '\n')
+    def cell_to_col_dict(self, slice, col_name, col_idx):
+        for i in range(len(slice)):
+            if self.is_date(slice[i]) \
+               and slice[i+col_idx].isnumeric():
+                if slice[i] not in self.dict:
+                    self.dict[slice[i]] = { col_name: slice[i+col_idx] }
+                else:
+                    self.dict[slice[i]].update({ col_name: slice[i+col_idx] })
+    
 
 def main():
     '''
@@ -105,7 +98,6 @@ def main():
     Looks like we need to save to get a 
     file pointer for the PDF Reader
     '''
-    
 
     PDF_file = './pdf/' + os.path.basename(PDF_url)
     
@@ -131,17 +123,51 @@ def main():
         '''
         text = text.replace('\n', '')
 
-        start = text.index('Data Table for Figures 1 and 2')
-        end = text.index('Data Table for Figure 3')
+        '''
+        Find all instances of...
+        "Data Table for Figure" case-insensitive (typo in the doc)
+        
+        Major rewrite of Data Tables for Figures 1 and 2 
+        means pulling columns from two different Data Tables
+        '''
+        data_table_idxs = [i for i in range(len(text)) if text.upper().startswith('Data Table for Figure'.upper(), i)] 
+
+        start1 = data_table_idxs[0]
+        start2 = data_table_idxs[1]
+        end = data_table_idxs[2]
 
         '''
-        List of non-whitespace tokens
+        Lists of non-whitespace tokens
+        First contains "Total" column; Second "Daily"
         '''
-        snippet = text[start:end].split()
+        snippet1 = text[start1:start2].split()
+        snippet2 = text[start2:end].split()
         
-        table = OPHTable()
-        table.process(snippet)
-        table.to_csv(CSV_OUTPUT)
+        '''
+        This results in dnt.dict looking like...
+        {'2/19/2020': {'Total': '0', 'Daily': '0'},
+         '2/20/2020': {'Total': '0', 'Daily': '0'},
+         ...
+         '4/24/2020': {'Total': '1106', 'Daily': '26'},
+         '4/25/2020': {'Total': '1110', 'Daily': '4'}}
+        '''
+        dnt = DateNumTable()
+        dnt.cell_to_col_dict(snippet1, 'Total', 1)
+        dnt.cell_to_col_dict(snippet2, 'Daily', 4)
+
+        with open('timeseries/ottawa_cases.csv', 'w', newline='') as csvfile:
+            fieldnames = ['Date', 'Total', 'Daily']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+            writer.writeheader()
+            for k in dnt.dict.keys():
+                v = dnt.dict[k]
+                row_dict = {
+                    'Date': k, 
+                    'Total': v['Total'],
+                    'Daily': v['Daily'],
+                }
+                writer.writerow(row_dict)
 
         sys.exit(0)
     
