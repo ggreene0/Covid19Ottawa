@@ -1,5 +1,5 @@
 # What this is...
-This publishes a machine readable (CSV) format table of COVID-19 cases in Ottawa, Ontario, Canada derived from the PDF from Ottawa Public Health.
+This publishes a machine readable (CSV) format table of COVID-19 cases in Ottawa, Ontario, Canada derived from the PDF of the (mostly daily) COVID-19 Epidemiology Update from Ottawa Public Health.
 
 Inspired by https://github.com/ishaberry/Covid19Canada
 
