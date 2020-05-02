@@ -153,7 +153,7 @@ def main():
         '''
         dnt = DateNumTable()
         dnt.cell_to_col_dict(snippet1, 'Total', 1)
-        dnt.cell_to_col_dict(snippet2, 'Daily', 4)
+        dnt.cell_to_col_dict(snippet2, 'Daily', 1)
 
         with open('timeseries/ottawa_cases.csv', 'w', newline='') as csvfile:
             fieldnames = ['Date', 'Total', 'Daily']
