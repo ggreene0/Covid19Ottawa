@@ -55,14 +55,26 @@ class PdfUrlParser(HTMLParser):
                 
 
 class DateNumTable(object):
-    '''
-    Need docstring here
-    '''
+    """
+    Given a list of strings like...
+
+        <list> = ..., "1/01/2020", "11", "22", "33", "44", ...
+
+        self.cell_to_col_dict(<list>, "a_column", 2)
+
+    Produces... 
+
+        self.dict = { ..., "1/01/2020": {"a_column": "22"}, ...}
+    """
     def __init__(self):
         self.dict = {}
 
     def is_date(self, line):
-        # Date format is like 2/19/2020
+        """
+        Date format is like 2/19/2020
+        
+        Returns true if line matches, false otherwise
+        """
         rc = False
         mdy = line.split('/')
         if len(mdy) == 3 \
@@ -79,78 +91,87 @@ class DateNumTable(object):
                 else:
                     self.dict[slice[i]].update({ col_name: slice[i+col_idx] })
     
-
-def main():
-    '''
-    - Get page
-    - Find PDF link
-    '''
-
-    req = rq.get(OPH_url)
-    parser = PdfUrlParser()
-    parser.feed(req.text)
-
-    PDF_url = parser.pdf_url
-
-    '''
-    Fetch PDF
-
-    Looks like we need to save to get a 
-    file pointer for the PDF Reader
-    '''
-
-    PDF_file = './pdf/' + os.path.basename(PDF_url)
-    
-    if not os.path.exists(PDF_file):
-
-        pdfreq = rq.get(PDF_url)
-        with open(PDF_file, 'wb') as f:
+class PDF(object):
+    def __init__(self, url):
+        self.url = url
+        self.file = './pdf/' + os.path.basename(self.url)
+        
+    def save(self):
+        pdfreq = rq.get(self.url)
+        with open(self.file, 'wb') as f:
             f.write(pdfreq.content)
 
-        print('Saved ' + PDF_file)
+        print('Saved ' + self.file)
 
-        # creating a pdf reader object
-        fr = PDFR(PDF_file)
+    def text(self):
+        fr = PDFR(self.file)
 
         text = ''
         for pgn in range(fr.numPages):
             pg = fr.getPage(pgn) 
             text = text + pg.extractText()
+        
+        return text
+    
+def main():
+    """
+    - Get page
+    - Find PDF link
+    """
 
-        '''
+    req = rq.get(OPH_url)
+    parser = PdfUrlParser()
+    parser.feed(req.text)
+
+    pdf = PDF(parser.pdf_url)
+    
+    if os.path.exists(pdf.file):
+        sys.exit(1)
+    else:
+        """
+        Fetch PDF
+
+        Looks like we need to save to get a 
+        file pointer for the PDF Reader
+        """
+        pdf.save()
+        text = pdf.text()
+    
+        """
         Strip all newlines
         (random from one PDF to another)
-        '''
+        """
         text = text.replace('\n', '')
 
-        '''
+        """
         Find all instances of...
         "Data Table for Figure" case-insensitive (typo in the doc)
         
         Major rewrite of Data Tables for Figures 1 and 2 
         means pulling columns from two different Data Tables
-        '''
-        data_table_idxs = [i for i in range(len(text)) if text.upper().startswith('Data Table for Figure'.upper(), i)] 
+        """
+        data_table_idxs = [i for i in range(len(text)) 
+                           if text.upper().startswith('Data Table for Figure'.upper(), i)]
 
         start1 = data_table_idxs[0]
         start2 = data_table_idxs[1]
         end = data_table_idxs[2]
 
-        '''
+        """
         Lists of non-whitespace tokens
         First contains "Total" column; Second "Daily"
-        '''
+        """
         snippet1 = text[start1:start2].split()
         snippet2 = text[start2:end].split()
         
-        '''
+        """
         This results in dnt.dict looking like...
         {'2/19/2020': {'Total': '0', 'Daily': '0'},
          '2/20/2020': {'Total': '0', 'Daily': '0'},
          ...
          '4/24/2020': {'Total': '1106', 'Daily': '26'},
          '4/25/2020': {'Total': '1110', 'Daily': '4'}}
-        '''
+        """
         dnt = DateNumTable()
         dnt.cell_to_col_dict(snippet1, 'Total', 1)
         dnt.cell_to_col_dict(snippet2, 'Daily', 1)
@@ -170,9 +191,6 @@ def main():
                 writer.writerow(row_dict)
 
         sys.exit(0)
-    
-    else:
-        sys.exit(1)
 
 if __name__ == "__main__":
     main()
